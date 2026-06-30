@@ -6,10 +6,18 @@
         <aside class="sidebar">
             <div class="brand">🌸 Daily Bloom</div>
 
-            <AuthorizeView>
+
+ <AuthorizeView>
                 <Authorized>
                     <div class="user-chip">
-                        <div class="avatar">@(context.User.Identity!.Name!.Substring(0,1).ToUpper())</div>
+                        @if (!string.IsNullOrEmpty(_picturePath))
+                        {
+                            <img src="@_picturePath" class="avatar avatar-img" alt="profile" />
+                        }
+                        else
+                        {
+                            <div class="avatar">@(context.User.Identity!.Name!.Substring(0,1).ToUpper())</div>
+                        }
                         <span>@context.User.Identity!.Name</span>
                     </div>
                     <nav class="nav-tabs">
@@ -34,6 +42,28 @@
     </div>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? _picturePath;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPicture();
+    }
+
+    private async Task LoadPicture()
+    {
+        if (AuthStateTask == null) return;
+        var authState = await AuthStateTask;
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (idClaim != null && int.TryParse(idClaim.Value, out var userId))
+        {
+            var user = await Db.Users.FindAsync(userId);
+            _picturePath = user?.ProfilePicturePath;
+        }
+    }
+
     private async Task Logout()
     {
         await CurrentUser.SignOutAsync();
