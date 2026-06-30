@@ -1,0 +1,42 @@
+@inherits LayoutComponentBase
+@inject CurrentUserService CurrentUser
+@inject NavigationManager Nav
+
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">🌸 Daily Bloom</div>
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user-chip">
+                        <div class="avatar">@(context.User.Identity!.Name!.Substring(0,1).ToUpper())</div>
+                        <span>@context.User.Identity!.Name</span>
+                    </div>
+                    <nav class="nav-tabs">
+                        <NavLink href="dashboard/todo" Match="NavLinkMatch.Prefix">✅ To-Do List</NavLink>
+                        <NavLink href="dashboard/budget" Match="NavLinkMatch.Prefix">💰 Budgeting</NavLink>
+                        <NavLink href="dashboard/books" Match="NavLinkMatch.Prefix">📚 Books</NavLink>
+                    </nav>
+                    <button class="logout-btn" @onclick="Logout">🚪 Log out</button>
+                </Authorized>
+                <NotAuthorized>
+                    <nav class="nav-tabs">
+                        <NavLink href="login">🔑 Login</NavLink>
+                        <NavLink href="register">🌱 Register</NavLink>
+                    </nav>
+                </NotAuthorized>
+            </AuthorizeView>
+        </aside>
+
+        <main class="content">
+            @Body
+        </main>
+    </div>
+
+@code {
+    private async Task Logout()
+    {
+        await CurrentUser.SignOutAsync();
+        Nav.NavigateTo("/login", true);
+    }
+}

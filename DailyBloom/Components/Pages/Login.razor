@@ -1,0 +1,53 @@
+@page "/"
+@page "/login"
+@inject AuthService AuthSvc
+@inject CurrentUserService CurrentUser
+@inject NavigationManager Nav
+
+<div class="auth-wrap">
+    <div class="auth-card">
+        <h1>🌸 Daily Bloom</h1>
+        <p class="subtitle">Tasks, budget, and books — all in one cozy spot.</p>
+
+        <EditForm Model="_form" OnValidSubmit="HandleLogin">
+            <DataAnnotationsValidator />
+            <label>Username</label>
+            <InputText @bind-Value="_form.Username" class="input" placeholder="your username" />
+
+            <label>Password</label>
+            <InputText @bind-Value="_form.Password" type="password" class="input" placeholder="••••••••" />
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <p class="error-text">@_error</p>
+            }
+
+            <button type="submit" class="btn-primary">Log in 🌼</button>
+        </EditForm>
+
+        <p class="switch-link">New here? <a href="register">Create an account</a></p>
+    </div>
+</div>
+
+@code {
+    private LoginForm _form = new();
+    private string? _error;
+
+    private async Task HandleLogin()
+    {
+        var (success, message, user) = await AuthSvc.LoginAsync(_form.Username, _form.Password);
+        if (!success || user == null)
+        {
+            _error = message;
+            return;
+        }
+        await CurrentUser.SignInAsync(user.Id, user.Name);
+        Nav.NavigateTo("/dashboard/todo", true);
+    }
+
+    public class LoginForm
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}
