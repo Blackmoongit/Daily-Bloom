@@ -1,12 +1,12 @@
 :root {
-    --pink: #ffd6e8;
-    --pink-deep: #ff8fb3;
-    --lavender: #e6dcff;
-    --mint: #d4f5e0;
-    --cream: #fff8f0;
-    --text-dark: #5a4a52;
-    --text-soft: #8a7a82;
-    --shadow: 0 6px 18px rgba(255, 143, 179, 0.15);
+    --pink: #d6ecff;
+    --pink-deep: #6fb8e8;
+    --lavender: #eaf6ff;
+    --mint: #d8f0e8;
+    --cream: #fffaf0;
+    --text-dark: #3f4a52;
+    --text-soft: #7c8a92;
+    --shadow: 0 6px 18px rgba(111, 184, 232, 0.18);
     --radius: 18px;
 }
 
