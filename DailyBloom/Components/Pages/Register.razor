@@ -1,0 +1,96 @@
+@page "/register"
+@inject AuthService AuthSvc
+@inject CurrentUserService CurrentUser
+@inject NavigationManager Nav
+@inject IWebHostEnvironment Env
+
+<div class="d-flex align-items-center justify-content-center py-5" style="min-height: 100vh;">
+    <div class="card shadow-sm border-0 rounded-4 p-2" style="width: 420px;">
+        <div class="card-body text-center">
+            <h1 class="mb-1">🌱 Join Daily Bloom</h1>
+            <p class="text-muted small mb-4">Set up your cozy little corner of productivity.</p>
+
+            <EditForm Model="_form" OnValidSubmit="HandleRegister" class="text-start">
+                <DataAnnotationsValidator />
+
+                <label class="form-label small text-muted">Full Name</label>
+                <InputText @bind-Value="_form.Name" class="form-control mb-3" placeholder="Jane Doe" />
+
+                <label class="form-label small text-muted">Username</label>
+                <InputText @bind-Value="_form.Username" class="form-control mb-3" placeholder="janedoe" />
+
+                <label class="form-label small text-muted">Password</label>
+                <InputText @bind-Value="_form.Password" type="password" class="form-control mb-3" placeholder="••••••••" />
+
+                <label class="form-label small text-muted">Date of Birth</label>
+                <InputDate @bind-Value="_form.DateOfBirth" class="form-control mb-3" />
+
+                <label class="form-label small text-muted">Profile Picture (optional)</label>
+                <InputFile @key="@("profile-pic-input")" OnChange="HandleFileSelected" class="form-control mb-2" accept=".png,.jpg,.jpeg,.webp" />
+                @if (_previewPath != null)
+                {
+                    <div class="text-center mb-2">
+                        <img src="@_previewPath" class="rounded-circle profile-photo-lg" alt="preview" />
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <p class="text-danger small">@_error</p>
+                }
+
+                <button type="submit" class="btn btn-primary w-100 rounded-pill mt-2">Create account 🌸</button>
+            </EditForm>
+
+            <p class="text-muted small mt-3">Already have an account? <a href="login">Log in</a></p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterForm _form = new();
+    private string? _error;
+    private string? _previewPath;
+    private string? _savedRelativePath;
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.Name)}";
+        var uploadsFolder = Path.Combine(Env.WebRootPath, "uploads", "profiles");
+        Directory.CreateDirectory(uploadsFolder);
+        var fullPath = Path.Combine(uploadsFolder, fileName);
+
+        await using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+        await using var fs = new FileStream(fullPath, FileMode.Create);
+        await stream.CopyToAsync(fs);
+
+        _savedRelativePath = $"/uploads/profiles/{fileName}";
+        _previewPath = _savedRelativePath;
+    }
+
+    private async Task HandleRegister()
+    {
+        var (success, message, user) = await AuthSvc.RegisterAsync(
+            _form.Name, _form.Username, _form.Password, _form.DateOfBirth, _savedRelativePath);
+
+        if (!success || user == null)
+        {
+            _error = message;
+            return;
+        }
+
+        await CurrentUser.SignInAsync(user.Id, user.Name);
+        Nav.NavigateTo("/profile");
+    }
+
+    public class RegisterForm
+    {
+        public string Name { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+        public DateTime DateOfBirth { get; set; } = DateTime.Today.AddYears(-20);
+    }
+}

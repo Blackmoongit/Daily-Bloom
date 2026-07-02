@@ -1,0 +1,6 @@
+@page "/dashboard"
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/dashboard/todo");
+}

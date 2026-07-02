@@ -1,0 +1,222 @@
+@page "/dashboard/budget"
+@inject AppDbContext Db
+@inject CurrentUserService CurrentUser
+@using Microsoft.EntityFrameworkCore
+
+<AuthGuard>
+<h1 class="mb-4">💰 Budgeting</h1>
+
+<div class="d-flex flex-wrap gap-2 align-items-center mb-4">
+    <select class="form-select" style="width: auto;" @bind="_selectedMonth" @bind:after="ApplyMonthFilter">
+        @foreach (var m in _availableMonths)
+        {
+            <option value="@m.ToString("yyyy-MM")">@m.ToString("MMMM yyyy")</option>
+        }
+    </select>
+    <button class="btn btn-primary rounded-pill" @onclick="() => OpenEditor(true)">+ Add Income</button>
+    <button class="btn btn-outline-secondary rounded-pill" @onclick="() => OpenEditor(false)">+ Add Expense</button>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+        <div class="card shadow-sm border-0 rounded-4 text-center p-3 summary-tile">
+            <span class="text-muted small">Total Income</span>
+            <strong class="amount-income">$@_monthIncomeTotal.ToString("N2")</strong>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="card shadow-sm border-0 rounded-4 text-center p-3 summary-tile">
+            <span class="text-muted small">Total Expense</span>
+            <strong class="amount-expense">$@_monthExpenseTotal.ToString("N2")</strong>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="card shadow-sm border-0 rounded-4 text-center p-3 summary-tile">
+            <span class="text-muted small">Grand Total</span>
+            <strong class="@(_grandTotal >= 0 ? "amount-income" : "amount-expense")">$@_grandTotal.ToString("N2")</strong>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-md-6">
+        <h5>📈 Income</h5>
+        @foreach (var i in _monthIncomes)
+        {
+            <div class="card shadow-sm border-0 rounded-4 mb-2 p-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="flex-fill">
+                        <div class="fw-semibold">@i.Description</div>
+                        <div class="text-muted small">@i.Date.ToString("MMM dd") — @i.Comments</div>
+                    </div>
+                    <div class="amount-income">+$@i.Amount.ToString("N2")</div>
+                    <button class="btn btn-sm btn-link" @onclick="() => EditIncome(i)">✏️</button>
+                    <button class="btn btn-sm btn-link" @onclick="() => DeleteIncome(i)">🗑️</button>
+                </div>
+            </div>
+        }
+        @if (!_monthIncomes.Any()) { <p class="text-muted small fst-italic">No income logged this month.</p> }
+    </div>
+
+    <div class="col-12 col-md-6">
+        <h5>📉 Expenses</h5>
+        @foreach (var x in _monthExpenses)
+        {
+            <div class="card shadow-sm border-0 rounded-4 mb-2 p-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="flex-fill">
+                        <div class="fw-semibold">@x.Description</div>
+                        <div class="text-muted small">@x.Date.ToString("MMM dd") — @x.Comments</div>
+                    </div>
+                    <div class="amount-expense">-$@x.Amount.ToString("N2")</div>
+                    <button class="btn btn-sm btn-link" @onclick="() => EditExpense(x)">✏️</button>
+                    <button class="btn btn-sm btn-link" @onclick="() => DeleteExpense(x)">🗑️</button>
+                </div>
+            </div>
+        }
+        @if (!_monthExpenses.Any()) { <p class="text-muted small fst-italic">No expenses logged this month.</p> }
+    </div>
+</div>
+
+@if (_showEditor)
+{
+    <div class="bloom-modal-backdrop" @onclick="CloseEditor">
+        <div class="card shadow rounded-4 p-3" style="width: 380px;" @onclick:stopPropagation="true">
+            <div class="card-body">
+                <h4>@(_isIncomeMode ? (_editIncome!.Id == 0 ? "New Income" : "Edit Income") : (_editExpense!.Id == 0 ? "New Expense" : "Edit Expense"))</h4>
+
+                @if (_isIncomeMode)
+                {
+                    <label class="form-label small text-muted mt-2">Date</label>
+                    <input type="date" class="form-control" value="@_editIncome!.Date.ToString("yyyy-MM-dd")" @onchange="e => _editIncome.Date = DateTime.Parse(e.Value!.ToString()!)" />
+                    <label class="form-label small text-muted mt-2">Description</label>
+                    <input class="form-control" @bind="_editIncome.Description" />
+                    <label class="form-label small text-muted mt-2">Amount</label>
+                    <input type="number" step="0.01" class="form-control" @bind="_editIncome.Amount" />
+                    <label class="form-label small text-muted mt-2">Comments</label>
+                    <textarea class="form-control" @bind="_editIncome.Comments"></textarea>
+                }
+                else
+                {
+                    <label class="form-label small text-muted mt-2">Date</label>
+                    <input type="date" class="form-control" value="@_editExpense!.Date.ToString("yyyy-MM-dd")" @onchange="e => _editExpense.Date = DateTime.Parse(e.Value!.ToString()!)" />
+                    <label class="form-label small text-muted mt-2">Description</label>
+                    <input class="form-control" @bind="_editExpense.Description" />
+                    <label class="form-label small text-muted mt-2">Amount</label>
+                    <input type="number" step="0.01" class="form-control" @bind="_editExpense.Amount" />
+                    <label class="form-label small text-muted mt-2">Comments</label>
+                    <textarea class="form-control" @bind="_editExpense.Comments"></textarea>
+                }
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button class="btn btn-outline-secondary rounded-pill" @onclick="CloseEditor">Cancel</button>
+                    <button class="btn btn-primary rounded-pill" @onclick="Save">Save 🌸</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+</AuthGuard>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private int? _userId;
+    private List<IncomeEntry> _allIncomes = new();
+    private List<ExpenseEntry> _allExpenses = new();
+    private List<IncomeEntry> _monthIncomes = new();
+    private List<ExpenseEntry> _monthExpenses = new();
+    private List<DateTime> _availableMonths = new();
+    private string _selectedMonth = DateTime.Today.ToString("yyyy-MM");
+
+    private decimal _monthIncomeTotal, _monthExpenseTotal, _grandTotal;
+
+    private bool _showEditor;
+    private bool _isIncomeMode;
+    private IncomeEntry? _editIncome;
+    private ExpenseEntry? _editExpense;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = await ResolveUserId();
+        if (_userId == null) return;
+        await LoadAll();
+    }
+
+    private async Task<int?> ResolveUserId()
+    {
+        if (AuthStateTask == null) return null;
+        var authState = await AuthStateTask;
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return idClaim != null && int.TryParse(idClaim.Value, out var id) ? id : null;
+    }
+
+    private async Task LoadAll()
+    {
+        if (_userId == null) return;
+        _allIncomes = await Db.Incomes.Where(i => i.UserId == _userId).ToListAsync();
+        _allExpenses = await Db.Expenses.Where(e => e.UserId == _userId).ToListAsync();
+
+        var months = _allIncomes.Select(i => new DateTime(i.Date.Year, i.Date.Month, 1))
+            .Concat(_allExpenses.Select(e => new DateTime(e.Date.Year, e.Date.Month, 1)))
+            .Append(new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1))
+            .Distinct().OrderByDescending(d => d).ToList();
+        _availableMonths = months;
+
+        ApplyMonthFilter();
+    }
+
+    private void ApplyMonthFilter()
+    {
+        var parts = _selectedMonth.Split('-');
+        var year = int.Parse(parts[0]);
+        var month = int.Parse(parts[1]);
+
+        _monthIncomes = _allIncomes.Where(i => i.Date.Year == year && i.Date.Month == month).OrderByDescending(i => i.Date).ToList();
+        _monthExpenses = _allExpenses.Where(e => e.Date.Year == year && e.Date.Month == month).OrderByDescending(e => e.Date).ToList();
+
+        _monthIncomeTotal = _monthIncomes.Sum(i => i.Amount);
+        _monthExpenseTotal = _monthExpenses.Sum(e => e.Amount);
+        _grandTotal = _monthIncomeTotal - _monthExpenseTotal;
+    }
+
+    protected override void OnParametersSet() => ApplyMonthFilter();
+
+    private void OpenEditor(bool isIncome)
+    {
+        if (_userId == null) return;
+        _isIncomeMode = isIncome;
+        if (isIncome) _editIncome = new IncomeEntry { UserId = _userId.Value, Date = DateTime.Today };
+        else _editExpense = new ExpenseEntry { UserId = _userId.Value, Date = DateTime.Today };
+        _showEditor = true;
+    }
+
+    private void EditIncome(IncomeEntry i) { _isIncomeMode = true; _editIncome = i; _showEditor = true; }
+    private void EditExpense(ExpenseEntry x) { _isIncomeMode = false; _editExpense = x; _showEditor = true; }
+
+    private void CloseEditor()
+    {
+        _showEditor = false; _editIncome = null; _editExpense = null;
+    }
+
+    private async Task Save()
+    {
+        if (_isIncomeMode)
+        {
+            if (_editIncome!.Id == 0) Db.Incomes.Add(_editIncome);
+            else Db.Incomes.Update(_editIncome);
+        }
+        else
+        {
+            if (_editExpense!.Id == 0) Db.Expenses.Add(_editExpense);
+            else Db.Expenses.Update(_editExpense);
+        }
+        await Db.SaveChangesAsync();
+        CloseEditor();
+        await LoadAll();
+    }
+
+    private async Task DeleteIncome(IncomeEntry i) { Db.Incomes.Remove(i); await Db.SaveChangesAsync(); await LoadAll(); }
+    private async Task DeleteExpense(ExpenseEntry x) { Db.Expenses.Remove(x); await Db.SaveChangesAsync(); await LoadAll(); }
+}

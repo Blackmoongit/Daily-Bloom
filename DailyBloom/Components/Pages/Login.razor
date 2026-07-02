@@ -1,0 +1,56 @@
+@page "/"
+@page "/login"
+@inject AuthService AuthSvc
+@inject CurrentUserService CurrentUser
+@inject NavigationManager Nav
+
+<div class="d-flex align-items-center justify-content-center" style="min-height: 100vh;">
+    <div class="card shadow-sm border-0 rounded-4 p-2" style="width: 380px;">
+        <div class="card-body text-center">
+            <h1 class="mb-1">🌸 Daily Bloom</h1>
+            <p class="text-muted small mb-4">Tasks, budget, and books — all in one cozy spot.</p>
+
+            <EditForm Model="_form" OnValidSubmit="HandleLogin" class="text-start">
+                <DataAnnotationsValidator />
+
+                <label class="form-label small text-muted">Username</label>
+                <InputText @bind-Value="_form.Username" class="form-control mb-3" placeholder="your username" />
+
+                <label class="form-label small text-muted">Password</label>
+                <InputText @bind-Value="_form.Password" type="password" class="form-control mb-3" placeholder="••••••••" />
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <p class="text-danger small">@_error</p>
+                }
+
+                <button type="submit" class="btn btn-primary w-100 rounded-pill mt-2">Log in 🌼</button>
+            </EditForm>
+
+            <p class="text-muted small mt-3">New here? <a href="register">Create an account</a></p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginForm _form = new();
+    private string? _error;
+
+    private async Task HandleLogin()
+    {
+        var (success, message, user) = await AuthSvc.LoginAsync(_form.Username, _form.Password);
+        if (!success || user == null)
+        {
+            _error = message;
+            return;
+        }
+        await CurrentUser.SignInAsync(user.Id, user.Name);
+        Nav.NavigateTo("/profile");
+    }
+
+    public class LoginForm
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

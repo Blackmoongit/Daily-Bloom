@@ -1,0 +1,53 @@
+@inject AuthenticationStateProvider AuthProvider
+
+@if (_authorized == true)
+{
+    @ChildContent
+}
+else if (_authorized == false)
+{
+    <div class="text-center mt-5">
+        <p class="text-muted mb-2">You need to be logged in to see this page.</p>
+        <a href="/login" class="btn btn-primary rounded-pill">🔑 Go to Login</a>
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    private bool? _authorized; // null while we're still checking
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuth();
+    }
+
+    private async Task CheckAuth()
+    {
+        // Try a handful of times over a few seconds before concluding the
+        // user is actually logged out. A file upload can briefly disconnect
+        // and reconnect the underlying connection, and re-establishing the
+        // session can take longer than a single quick retry.
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            var state = await AuthProvider.GetAuthenticationStateAsync();
+            if (state.User.Identity?.IsAuthenticated == true)
+            {
+                _authorized = true;
+                return;
+            }
+
+            if (attempt < 5)
+            {
+                await Task.Delay(700);
+            }
+        }
+
+        // Genuinely not logged in (or the connection never recovered) —
+        // show a message with a link instead of forcibly navigating away.
+        // This avoids ever kicking someone off a page they're actively
+        // working on (like mid-upload) due to a transient false negative.
+        _authorized = false;
+    }
+}
+
+

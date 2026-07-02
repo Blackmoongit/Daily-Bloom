@@ -1,0 +1,307 @@
+@page "/dashboard/todo"
+@inject AppDbContext Db
+@inject CurrentUserService CurrentUser
+@inject IWebHostEnvironment Env
+@using Microsoft.EntityFrameworkCore
+
+<AuthGuard>
+<h1 class="mb-4">✅ To-Do List</h1>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-8">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <input class="form-control" style="max-width: 260px;" placeholder="🔍 Search tasks..."
+                   @bind-value="_search" @bind-value:event="oninput" @onkeyup="ApplyFilters" />
+
+            <select class="form-select" style="width: auto;" @bind="_viewMode" @bind:after="ApplyFilters">
+                <option value="Day">Today</option>
+                <option value="Week">This Week</option>
+                <option value="Month">This Month</option>
+                <option value="Year">This Year</option>
+                <option value="All">All Tasks</option>
+            </select>
+
+            <button class="btn btn-primary rounded-pill ms-auto" @onclick="OpenNewTask">+ Add Task</button>
+        </div>
+
+        @if (!_filteredTasks.Any())
+        {
+            <p class="text-muted fst-italic">No tasks here yet — add one to get blooming! 🌷</p>
+        }
+
+        @foreach (var task in _filteredTasks)
+        {
+            <div class="card shadow-sm border-0 rounded-4 mb-3 priority-stripe-@task.Priority.ToString().ToLower()">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <input type="checkbox" class="form-check-input" checked="@task.IsCompleted" @onchange="e => ToggleComplete(task, e)" />
+                        <span class="fw-semibold @(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">@task.Title</span>
+                        <span class="badge text-bg-light">@task.Priority</span>
+                        <span class="text-muted small ms-auto">📅 @task.EndDate.ToString("MMM dd, yyyy")</span>
+                        <button class="btn btn-sm btn-link" @onclick="() => EditTask(task)">✏️</button>
+                        <button class="btn btn-sm btn-link" @onclick="() => DeleteTask(task)">🗑️</button>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(task.Description))
+                    {
+                        <p class="text-muted small mb-2">@task.Description</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(task.Hashtags))
+                    {
+                        <div class="d-flex gap-2 flex-wrap mb-2">
+                            @foreach (var tag in task.Hashtags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                <span class="hashtag-pill">@tag</span>
+                            }
+                        </div>
+                    }
+                    @if (task.SubTasks.Any())
+                    {
+                        <ul class="list-unstyled small mb-0 ps-2">
+                            @foreach (var sub in task.SubTasks)
+                            {
+                                <li class="d-flex align-items-center gap-2 mb-1">
+                                    <input type="checkbox" class="form-check-input" checked="@sub.IsCompleted" @onchange="e => ToggleSubtask(sub, e)" />
+                                    <span class="@(sub.IsCompleted ? "text-decoration-line-through text-muted" : "")">@sub.Title</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm border-0 rounded-4 p-3">
+            <h5>📆 Upcoming Deadlines</h5>
+            @foreach (var group in _filteredTasks.GroupBy(t => t.EndDate.Date).OrderBy(g => g.Key))
+            {
+                <div class="mb-3">
+                    <div class="fw-semibold small text-primary">@group.Key.ToString("ddd, MMM dd")</div>
+                    @foreach (var t in group)
+                    {
+                        <div class="calendar-task-pill">@t.Title</div>
+                    }
+                </div>
+            }
+            @if (!_filteredTasks.Any())
+            {
+                <p class="text-muted small fst-italic">Nothing scheduled 🌿</p>
+            }
+        </div>
+    </div>
+</div>
+
+@if (_showEditor)
+{
+    <div class="bloom-modal-backdrop" @onclick="CloseEditor">
+        <div class="card shadow rounded-4 p-3" style="width: 440px; max-height: 85vh; overflow-y: auto;" @onclick:stopPropagation="true">
+            <div class="card-body">
+                <h4>@(_editingTask!.Id == 0 ? "New Task" : "Edit Task")</h4>
+
+                <label class="form-label small text-muted mt-2">Title</label>
+                <input class="form-control" @bind="_editingTask.Title" />
+
+                <label class="form-label small text-muted mt-2">Description</label>
+                <textarea class="form-control" rows="2" @bind="_editingTask.Description"></textarea>
+
+                <div class="row mt-2">
+                    <div class="col">
+                        <label class="form-label small text-muted">Priority</label>
+                        <select class="form-select" @bind="_editingTask.Priority">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <label class="form-label small text-muted">End Date</label>
+                        <input type="date" class="form-control" value="@_editingTask.EndDate.ToString("yyyy-MM-dd")"
+                               @onchange="e => _editingTask.EndDate = DateTime.Parse(e.Value!.ToString()!)" />
+                    </div>
+                </div>
+
+                <label class="form-label small text-muted mt-2">Hashtags (comma separated)</label>
+                <input class="form-control" @bind="_editingTask.Hashtags" placeholder="#work, #urgent" />
+
+                <label class="form-label small text-muted mt-2">Sub-tasks</label>
+                @foreach (var sub in _editingTask.SubTasks)
+                {
+                    <div class="d-flex gap-2 mb-2">
+                        <input class="form-control form-control-sm" @bind="sub.Title" />
+                        <button class="btn btn-sm btn-link text-danger" @onclick="() => _editingTask.SubTasks.Remove(sub)">✖</button>
+                    </div>
+                }
+                <button class="btn btn-outline-secondary btn-sm rounded-pill mb-2" @onclick="() => _editingTask.SubTasks.Add(new SubTask())">+ Add sub-task</button>
+
+                <label class="form-label small text-muted mt-2 d-block">Comments</label>
+                @foreach (var c in _editingTask.Comments)
+                {
+                    <p class="small mb-1">💬 @c.Text <span class="text-muted">(@c.CreatedDate.ToString("MMM dd"))</span></p>
+                }
+                <div class="d-flex gap-2 mb-2">
+                    <input class="form-control form-control-sm" placeholder="Add a comment..." @bind="_newComment" />
+                    <button class="btn btn-outline-secondary btn-sm rounded-pill" @onclick="AddComment">Add</button>
+                </div>
+
+                <label class="form-label small text-muted mt-2 d-block">Attachments</label>
+                @foreach (var att in _editingTask.Attachments)
+                {
+                    <p class="small"><a href="@att.FilePath" target="_blank">📎 @att.FileName</a></p>
+                }
+                <InputFile OnChange="HandleAttachment" class="form-control form-control-sm mb-3" />
+
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-outline-secondary rounded-pill" @onclick="CloseEditor">Cancel</button>
+                    <button class="btn btn-primary rounded-pill" @onclick="SaveTask">Save 🌸</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+</AuthGuard>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private int? _userId;
+    private List<Models.TaskItem> _allTasks = new();
+    private List<Models.TaskItem> _filteredTasks = new();
+    private string _search = "";
+    private string _viewMode = "All";
+    private bool _showEditor;
+    private Models.TaskItem? _editingTask;
+    private string _newComment = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = await ResolveUserId();
+        if (_userId == null) return;
+        await LoadTasks();
+    }
+
+    private async Task<int?> ResolveUserId()
+    {
+        if (AuthStateTask == null) return null;
+        var authState = await AuthStateTask;
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return idClaim != null && int.TryParse(idClaim.Value, out var id) ? id : null;
+    }
+
+    private async Task LoadTasks()
+    {
+        if (_userId == null) return;
+        _allTasks = await Db.Tasks
+            .Include(t => t.SubTasks)
+            .Include(t => t.Comments)
+            .Include(t => t.Attachments)
+            .Where(t => t.UserId == _userId)
+            .OrderBy(t => t.EndDate)
+            .ToListAsync();
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        var now = DateTime.Today;
+        IEnumerable<Models.TaskItem> q = _allTasks;
+
+        q = _viewMode switch
+        {
+            "Day" => q.Where(t => t.EndDate.Date == now),
+            "Week" => q.Where(t => t.EndDate.Date >= now && t.EndDate.Date <= now.AddDays(7)),
+            "Month" => q.Where(t => t.EndDate.Year == now.Year && t.EndDate.Month == now.Month),
+            "Year" => q.Where(t => t.EndDate.Year == now.Year),
+            _ => q
+        };
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var s = _search.ToLower();
+            q = q.Where(t => t.Title.ToLower().Contains(s)
+                || (t.Description ?? "").ToLower().Contains(s)
+                || (t.Hashtags ?? "").ToLower().Contains(s));
+        }
+
+        _filteredTasks = q.ToList();
+        StateHasChanged();
+    }
+
+    private void OpenNewTask()
+    {
+        if (_userId == null) return;
+        _editingTask = new Models.TaskItem { UserId = _userId.Value };
+        _showEditor = true;
+    }
+
+    private void EditTask(Models.TaskItem task)
+    {
+        _editingTask = task;
+        _showEditor = true;
+    }
+
+    private void CloseEditor()
+    {
+        _showEditor = false;
+        _editingTask = null;
+        _newComment = "";
+    }
+
+    private async Task SaveTask()
+    {
+        if (string.IsNullOrWhiteSpace(_editingTask!.Title)) return;
+
+        if (_editingTask.Id == 0)
+            Db.Tasks.Add(_editingTask);
+        else
+            Db.Tasks.Update(_editingTask);
+
+        await Db.SaveChangesAsync();
+        CloseEditor();
+        await LoadTasks();
+    }
+
+    private async Task DeleteTask(Models.TaskItem task)
+    {
+        Db.Tasks.Remove(task);
+        await Db.SaveChangesAsync();
+        await LoadTasks();
+    }
+
+    private async Task ToggleComplete(Models.TaskItem task, ChangeEventArgs e)
+    {
+        task.IsCompleted = (bool)(e.Value ?? false);
+        await Db.SaveChangesAsync();
+    }
+
+    private async Task ToggleSubtask(SubTask sub, ChangeEventArgs e)
+    {
+        sub.IsCompleted = (bool)(e.Value ?? false);
+        await Db.SaveChangesAsync();
+    }
+
+    private void AddComment()
+    {
+        if (string.IsNullOrWhiteSpace(_newComment)) return;
+        _editingTask!.Comments.Add(new TaskComment { Text = _newComment, CreatedDate = DateTime.Now });
+        _newComment = "";
+    }
+
+    private async Task HandleAttachment(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        var folder = Path.Combine(Env.WebRootPath, "uploads", "tasks");
+        Directory.CreateDirectory(folder);
+        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.Name)}";
+        var fullPath = Path.Combine(folder, fileName);
+
+        await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        await using var fs = new FileStream(fullPath, FileMode.Create);
+        await stream.CopyToAsync(fs);
+
+        _editingTask!.Attachments.Add(new TaskAttachment { FileName = file.Name, FilePath = $"/uploads/tasks/{fileName}" });
+    }
+}

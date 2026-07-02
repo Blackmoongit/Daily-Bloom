@@ -1,0 +1,100 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject CurrentUserService CurrentUser
+@inject NavigationManager Nav
+@inject AppDbContext Db
+
+<div class="d-flex">
+    <aside class="bloom-sidebar d-flex flex-column p-3">
+        <div class="bloom-brand mb-3">🌸 Daily Bloom</div>
+
+        <AuthorizeView>
+            <Authorized>
+                <a href="/profile" class="d-flex align-items-center gap-2 text-decoration-none p-2 rounded-3 mb-3"
+                   style="background: var(--bb-lavender);">
+                    @if (!string.IsNullOrEmpty(_picturePath))
+                    {
+                        <img src="@_picturePath" class="rounded-circle avatar-sm" alt="profile" />
+                    }
+                    else
+                    {
+                        <div class="rounded-circle avatar-sm">@(context.User.Identity!.Name!.Substring(0,1).ToUpper())</div>
+                    }
+                    <span class="text-dark fw-semibold">@context.User.Identity!.Name</span>
+                </a>
+
+                <nav class="nav nav-pills flex-column bloom-nav mb-auto">
+                    <NavLink class="nav-link" href="dashboard/todo" Match="NavLinkMatch.Prefix">✅ To-Do List</NavLink>
+                    <NavLink class="nav-link" href="dashboard/budget" Match="NavLinkMatch.Prefix">💰 Budgeting</NavLink>
+                    <NavLink class="nav-link" href="dashboard/books" Match="NavLinkMatch.Prefix">📚 Books</NavLink>
+                    <NavLink class="nav-link" href="profile" Match="NavLinkMatch.Prefix">👤 Profile</NavLink>
+                </nav>
+
+                <button class="btn btn-outline-secondary rounded-pill mt-3" @onclick="Logout">🚪 Log out</button>
+            </Authorized>
+            <NotAuthorized>
+                <nav class="nav nav-pills flex-column bloom-nav">
+                    <NavLink class="nav-link" href="login">🔑 Login</NavLink>
+                    <NavLink class="nav-link" href="register">🌱 Register</NavLink>
+                </nav>
+            </NotAuthorized>
+        </AuthorizeView>
+    </aside>
+
+    <main class="flex-fill p-4">
+        @Body
+    </main>
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? _picturePath;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPicture();
+        Nav.LocationChanged += OnLocationChanged;
+        CurrentUser.ProfileUpdated += OnProfileUpdated;
+    }
+
+    private async void OnProfileUpdated()
+    {
+        await LoadPicture();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        // Re-check the picture every time you navigate, so editing it on the
+        // Profile page is reflected here without needing a full page reload.
+        await LoadPicture();
+        StateHasChanged();
+    }
+
+    private async Task LoadPicture()
+    {
+        if (AuthStateTask == null) return;
+        var authState = await AuthStateTask;
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (idClaim != null && int.TryParse(idClaim.Value, out var userId))
+        {
+            var user = await Db.Users.FindAsync(userId);
+            _picturePath = user?.ProfilePicturePath;
+        }
+    }
+
+    private async Task Logout()
+    {
+        await CurrentUser.SignOutAsync();
+        Nav.NavigateTo("/login");
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        CurrentUser.ProfileUpdated -= OnProfileUpdated;
+    }
+}
+

@@ -1,0 +1,173 @@
+@page "/profile"
+@inject AppDbContext Db
+@inject IWebHostEnvironment Env
+@inject CurrentUserService CurrentUser
+@using Microsoft.EntityFrameworkCore
+
+<AuthGuard>
+    @if (_user != null)
+    {
+        <div class="container py-4">
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-8">
+                    <div class="card shadow-sm border-0 rounded-4 mb-4">
+                        <div class="card-body p-4 text-center">
+                            <div class="mb-3">
+                                @if (!string.IsNullOrEmpty(_user.ProfilePicturePath))
+                                {
+                                    <img src="@_user.ProfilePicturePath" class="rounded-circle profile-photo-lg" alt="profile" />
+                                }
+                                else
+                                {
+                                    <div class="rounded-circle profile-photo-lg profile-photo-placeholder mx-auto">
+                                        @(_user.Name.Substring(0, 1).ToUpper())
+                                    </div>
+                                }
+                            </div>
+                            <h2 class="mb-0">@_user.Name 🌸</h2>
+                            <p class="text-muted">@@@_user.Username</p>
+
+                            @if (!_editMode)
+                            {
+                                <p class="text-muted small mb-3">Joined @_user.CreatedDate.ToString("MMMM dd, yyyy")</p>
+                                <button class="btn btn-primary rounded-pill px-4" @onclick="StartEdit">✏️ Edit Profile</button>
+                            }
+                            else
+                            {
+                                <div class="text-start mx-auto" style="max-width: 360px;">
+                                    <label class="form-label small text-muted">Full Name</label>
+                                    <input class="form-control mb-2" @bind="_editName" />
+
+                                    <label class="form-label small text-muted">Date of Birth</label>
+                                    <input type="date" class="form-control mb-2"
+                                           value="@_editDob.ToString("yyyy-MM-dd")"
+                                           @onchange="e => _editDob = DateTime.Parse(e.Value!.ToString()!)" />
+
+                                    <label class="form-label small text-muted">New Profile Picture</label>
+                                    <InputFile OnChange="HandlePictureChange" class="form-control mb-3" accept=".png,.jpg,.jpeg,.webp" />
+
+                                    @if (!string.IsNullOrEmpty(_error))
+                                    {
+                                        <p class="text-danger small">@_error</p>
+                                    }
+
+                                    <div class="d-flex gap-2 justify-content-center">
+                                        <button class="btn btn-outline-secondary rounded-pill px-3" @onclick="CancelEdit">Cancel</button>
+                                        <button class="btn btn-primary rounded-pill px-3" @onclick="SaveEdit">Save 🌸</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <a href="/dashboard/todo" class="card shadow-sm border-0 rounded-4 text-decoration-none h-100 dashboard-tile">
+                                <div class="card-body text-center py-4">
+                                    <div class="fs-1 mb-2">✅</div>
+                                    <div class="fw-semibold text-dark">To-Do List</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <a href="/dashboard/budget" class="card shadow-sm border-0 rounded-4 text-decoration-none h-100 dashboard-tile">
+                                <div class="card-body text-center py-4">
+                                    <div class="fs-1 mb-2">💰</div>
+                                    <div class="fw-semibold text-dark">Budgeting</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <a href="/dashboard/books" class="card shadow-sm border-0 rounded-4 text-decoration-none h-100 dashboard-tile">
+                                <div class="card-body text-center py-4">
+                                    <div class="fs-1 mb-2">📚</div>
+                                    <div class="fw-semibold text-dark">Books</div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</AuthGuard>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private int? _userId;
+    private User? _user;
+    private bool _editMode;
+    private string _editName = "";
+    private DateTime _editDob = DateTime.Today;
+    private string? _editPicturePath;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = await ResolveUserId();
+        if (_userId == null) return;
+        await LoadUser();
+    }
+
+    private async Task<int?> ResolveUserId()
+    {
+        if (AuthStateTask == null) return null;
+        var authState = await AuthStateTask;
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return idClaim != null && int.TryParse(idClaim.Value, out var id) ? id : null;
+    }
+
+    private async Task LoadUser()
+    {
+        _user = await Db.Users.FindAsync(_userId!.Value);
+    }
+
+    private void StartEdit()
+    {
+        if (_user == null) return;
+        _editName = _user.Name;
+        _editDob = _user.DateOfBirth;
+        _editPicturePath = _user.ProfilePicturePath;
+        _error = null;
+        _editMode = true;
+    }
+
+    private void CancelEdit() => _editMode = false;
+
+    private async Task HandlePictureChange(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        var folder = Path.Combine(Env.WebRootPath, "uploads", "profiles");
+        Directory.CreateDirectory(folder);
+        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.Name)}";
+        var fullPath = Path.Combine(folder, fileName);
+
+        await using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+        await using var fs = new FileStream(fullPath, FileMode.Create);
+        await stream.CopyToAsync(fs);
+
+        _editPicturePath = $"/uploads/profiles/{fileName}";
+    }
+
+    private async Task SaveEdit()
+    {
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            _error = "Name can't be empty.";
+            return;
+        }
+
+        _user!.Name = _editName;
+        _user.DateOfBirth = _editDob;
+        _user.ProfilePicturePath = _editPicturePath;
+
+        await Db.SaveChangesAsync();
+        _editMode = false;
+        await LoadUser();
+        CurrentUser.NotifyProfileUpdated();
+    }
+}

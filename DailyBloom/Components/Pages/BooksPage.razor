@@ -1,0 +1,196 @@
+@page "/dashboard/books"
+@inject AppDbContext Db
+@inject CurrentUserService CurrentUser
+@inject IWebHostEnvironment Env
+@using Microsoft.EntityFrameworkCore
+
+<AuthGuard>
+<h1 class="mb-4">📚 Books</h1>
+
+<button class="btn btn-primary rounded-pill mb-4" @onclick="OpenNewBook">+ Add Book</button>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-6">
+        <h5>🌙 Will Read</h5>
+        <div class="row row-cols-2 row-cols-md-3 g-3">
+            @foreach (var b in _willRead)
+            {
+                <div class="col">
+                    <div class="card shadow-sm border-0 rounded-4 p-2 text-center position-relative h-100">
+                        <input type="checkbox" class="form-check-input position-absolute top-0 end-0 m-2" title="Mark as read"
+                               @onchange="e => ToggleRead(b, e)" />
+                        @if (!string.IsNullOrEmpty(b.CoverPath))
+                        {
+                            <img src="@b.CoverPath" class="book-cover-img" alt="@b.Name" />
+                        }
+                        else
+                        {
+                            <div class="book-cover-placeholder">📖</div>
+                        }
+                        <div class="fw-semibold small mt-2">@b.Name</div>
+                        <div class="d-flex justify-content-center gap-2 mt-1">
+                            <button class="btn btn-sm btn-link" @onclick="() => EditBook(b)">✏️</button>
+                            <button class="btn btn-sm btn-link" @onclick="() => DeleteBook(b)">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        @if (!_willRead.Any()) { <p class="text-muted small fst-italic">Your reading list is empty 🌱</p> }
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <h5>✨ Read</h5>
+        <div class="row row-cols-2 row-cols-md-3 g-3">
+            @foreach (var b in _read)
+            {
+                <div class="col">
+                    <div class="card shadow-sm border-0 rounded-4 p-2 text-center position-relative h-100">
+                        <input type="checkbox" checked class="form-check-input position-absolute top-0 end-0 m-2" title="Read"
+                               @onchange="e => ToggleRead(b, e)" />
+                        @if (!string.IsNullOrEmpty(b.CoverPath))
+                        {
+                            <img src="@b.CoverPath" class="book-cover-img" alt="@b.Name" />
+                        }
+                        else
+                        {
+                            <div class="book-cover-placeholder">📖</div>
+                        }
+                        <div class="fw-semibold small mt-2">@b.Name</div>
+                        <div class="small">@Stars(b.Rating)</div>
+                        @if (!string.IsNullOrWhiteSpace(b.Reflection))
+                        {
+                            <p class="text-muted small fst-italic mb-0">"@b.Reflection"</p>
+                        }
+                        <div class="d-flex justify-content-center gap-2 mt-1">
+                            <button class="btn btn-sm btn-link" @onclick="() => EditBook(b)">✏️</button>
+                            <button class="btn btn-sm btn-link" @onclick="() => DeleteBook(b)">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        @if (!_read.Any()) { <p class="text-muted small fst-italic">No finished books yet — keep going! 📗</p> }
+    </div>
+</div>
+
+@if (_showEditor)
+{
+    <div class="bloom-modal-backdrop" @onclick="CloseEditor">
+        <div class="card shadow rounded-4 p-3" style="width: 380px;" @onclick:stopPropagation="true">
+            <div class="card-body">
+                <h4>@(_editing!.Id == 0 ? "New Book" : "Edit Book")</h4>
+
+                <label class="form-label small text-muted mt-2">Book Name</label>
+                <input class="form-control" @bind="_editing.Name" />
+
+                <label class="form-label small text-muted mt-2">Cover (optional)</label>
+                <InputFile OnChange="HandleCover" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
+                @if (!string.IsNullOrEmpty(_editing.CoverPath))
+                {
+                    <img src="@_editing.CoverPath" class="rounded-3 mt-2" style="width: 90px; height: 120px; object-fit: cover;" />
+                }
+
+                <label class="form-label small text-muted mt-2">Rating (0–5)</label>
+                <input type="number" min="0" max="5" class="form-control" @bind="_editing.Rating" />
+
+                <label class="form-label small text-muted mt-2">Comment / Reflection</label>
+                <textarea class="form-control" rows="3" @bind="_editing.Reflection"></textarea>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button class="btn btn-outline-secondary rounded-pill" @onclick="CloseEditor">Cancel</button>
+                    <button class="btn btn-primary rounded-pill" @onclick="SaveBook">Save 🌸</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+</AuthGuard>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private int? _userId;
+    private List<Book> _allBooks = new();
+    private List<Book> _willRead = new();
+    private List<Book> _read = new();
+    private bool _showEditor;
+    private Book? _editing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = await ResolveUserId();
+        if (_userId == null) return;
+        await LoadBooks();
+    }
+
+    private async Task<int?> ResolveUserId()
+    {
+        if (AuthStateTask == null) return null;
+        var authState = await AuthStateTask;
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return idClaim != null && int.TryParse(idClaim.Value, out var id) ? id : null;
+    }
+
+    private async Task LoadBooks()
+    {
+        if (_userId == null) return;
+        _allBooks = await Db.Books.Where(b => b.UserId == _userId).OrderByDescending(b => b.AddedDate).ToListAsync();
+        _willRead = _allBooks.Where(b => !b.IsRead).ToList();
+        _read = _allBooks.Where(b => b.IsRead).ToList();
+    }
+
+    private void OpenNewBook()
+    {
+        if (_userId == null) return;
+        _editing = new Book { UserId = _userId.Value };
+        _showEditor = true;
+    }
+
+    private void EditBook(Book b) { _editing = b; _showEditor = true; }
+    private void CloseEditor() { _showEditor = false; _editing = null; }
+
+    private async Task SaveBook()
+    {
+        if (string.IsNullOrWhiteSpace(_editing!.Name)) return;
+        if (_editing.Id == 0) Db.Books.Add(_editing);
+        else Db.Books.Update(_editing);
+        await Db.SaveChangesAsync();
+        CloseEditor();
+        await LoadBooks();
+    }
+
+    private async Task DeleteBook(Book b)
+    {
+        Db.Books.Remove(b);
+        await Db.SaveChangesAsync();
+        await LoadBooks();
+    }
+
+    private async Task ToggleRead(Book b, ChangeEventArgs e)
+    {
+        b.IsRead = (bool)(e.Value ?? false);
+        await Db.SaveChangesAsync();
+        await LoadBooks();
+    }
+
+    private async Task HandleCover(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        var folder = Path.Combine(Env.WebRootPath, "uploads", "covers");
+        Directory.CreateDirectory(folder);
+        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.Name)}";
+        var fullPath = Path.Combine(folder, fileName);
+
+        await using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+        await using var fs = new FileStream(fullPath, FileMode.Create);
+        await stream.CopyToAsync(fs);
+
+        _editing!.CoverPath = $"/uploads/covers/{fileName}";
+    }
+
+    private string Stars(int rating) => string.Concat(Enumerable.Repeat("⭐", rating));
+}
