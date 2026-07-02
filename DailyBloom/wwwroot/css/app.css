@@ -1,0 +1,128 @@
+:root {
+    --bs-primary: #6fb8e8;
+    --bs-primary-rgb: 111, 184, 232;
+    --bs-body-bg: #fffaf0;
+    --bs-body-color: #3f4a52;
+    --bb-pink: #d6ecff;
+    --bb-lavender: #eaf6ff;
+    --bb-mint: #d8f0e8;
+    --bb-soft: #7c8a92;
+}
+
+body {
+    background: linear-gradient(135deg, #fffaf0, #d6ecff 130%);
+    min-height: 100vh;
+}
+
+h1, h2, h3 { color: var(--bs-primary); }
+
+a { color: var(--bs-primary); }
+
+.btn-primary {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+}
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+    background-color: #5aa6d8 !important;
+    border-color: #5aa6d8 !important;
+}
+.btn-outline-secondary { border-color: #cfe3ee; color: var(--bb-soft); }
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 0.2rem rgba(111, 184, 232, 0.25);
+}
+
+.card { background: #fff; }
+
+/* ---------- Sidebar ---------- */
+.bloom-sidebar {
+    width: 230px;
+    min-height: 100vh;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(111, 184, 232, 0.15);
+}
+
+.bloom-brand { color: var(--bs-primary); font-weight: 700; font-size: 1.3rem; }
+
+.bloom-nav .nav-link {
+    color: var(--bs-body-color);
+    border-radius: 14px;
+    margin-bottom: .3rem;
+    font-weight: 500;
+}
+.bloom-nav .nav-link.active {
+    background-color: var(--bs-primary);
+    color: #fff;
+}
+.bloom-nav .nav-link:hover:not(.active) { background-color: var(--bb-lavender); }
+
+.avatar-sm {
+    width: 32px; height: 32px;
+    background: var(--bs-primary);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold;
+    object-fit: cover;
+}
+
+/* ---------- Profile page ---------- */
+.profile-photo-lg {
+    width: 110px; height: 110px;
+    object-fit: cover;
+}
+.profile-photo-placeholder {
+    width: 110px; height: 110px;
+    background: var(--bs-primary);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.2rem; font-weight: 700;
+}
+.dashboard-tile { transition: transform .15s ease; }
+.dashboard-tile:hover { transform: translateY(-3px); }
+
+/* ---------- To-Do ---------- */
+.priority-stripe-low { border-left: 5px solid #9fd8a3 !important; }
+.priority-stripe-medium { border-left: 5px solid #f6c768 !important; }
+.priority-stripe-high { border-left: 5px solid #ef6c8a !important; }
+
+.hashtag-pill {
+    background: var(--bb-pink);
+    color: var(--bs-body-color);
+    border-radius: 8px;
+    padding: .15rem .55rem;
+    font-size: .75rem;
+    display: inline-block;
+}
+
+.calendar-task-pill {
+    background: var(--bb-mint);
+    border-radius: 8px;
+    padding: .3rem .5rem;
+    font-size: .82rem;
+    margin-top: .25rem;
+}
+
+/* ---------- Budgeting ---------- */
+.amount-income { color: #4caf7d; font-weight: 700; }
+.amount-expense { color: #ef6c8a; font-weight: 700; }
+.summary-tile strong { font-size: 1.5rem; }
+
+/* ---------- Books ---------- */
+.book-cover-img { width: 100%; height: 150px; object-fit: cover; border-radius: 10px; }
+.book-cover-placeholder {
+    width: 100%; height: 150px; border-radius: 10px;
+    background: var(--bb-lavender);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem;
+}
+
+/* ---------- Custom modal (rendered conditionally, not via Bootstrap JS) ---------- */
+.bloom-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.3);
+    display: flex; align-items: center; justify-content: center; z-index: 1050;
+}
+
+@media (max-width: 800px) {
+    .bloom-sidebar { width: 100%; min-height: auto; }
+}
